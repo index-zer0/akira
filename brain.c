@@ -108,6 +108,7 @@ void update_synaptic_weights(matrix weights, matrix input, matrix adjustments) {
     for (i = 0; i < change->h * change->w; i++) {
         weights->x[i] += change->x[i];
     }
+    free(change);
 }
 
 matrix transpose(matrix a) {
@@ -122,8 +123,10 @@ matrix transpose(matrix a) {
 }
 
 int main (void) {
+    int SIZE_OF_INPUT = 3;
+    int TRAIN_COUNT = 3;
     int i;
-    matrix output = NULL, error = NULL, adjustments = NULL;
+    matrix output = NULL, error = NULL, adjustments = NULL, tr = NULL;
     double dtraining_input[] = {
         0, 0, 1,
         1, 1, 1,
@@ -136,24 +139,37 @@ int main (void) {
         1,
         0
     };
-    matrix_t training_input = { 4, 3, dtraining_input};
-    matrix_t training_output = { 4, 1, dtraining_output};
+    matrix_t training_input = { TRAIN_COUNT, SIZE_OF_INPUT, dtraining_input};
+    matrix_t training_output = { TRAIN_COUNT, 1, dtraining_output};
     srand(time(0));
     double dsynaptic_weights[] = {
         get_random(-1.0, 1.0),
         get_random(-1.0, 1.0),
         get_random(-1.0, 1.0)
     };
-    matrix_t synaptic_weights = { 3, 1, dsynaptic_weights};
+    matrix_t synaptic_weights = { SIZE_OF_INPUT, 1, dsynaptic_weights};
     printf("Synaptic weights:\n");
     mat_show(&synaptic_weights);
 
-    for (i = 0; i < 50000; i++) {
+    for (i = 0; i < 1; i++) {
+        if (output != NULL) {
+            free(output);
+        }
         output = mat_mul(&training_input, &synaptic_weights);
         apply_sigmoid(output);
+        if (error != NULL) {
+            free(error);
+        }
         error = calculate_error(&training_output, output);
+        if (adjustments != NULL) {
+            free(adjustments);
+        }
         adjustments = calculate_adjustments(error, output);
-        update_synaptic_weights(&synaptic_weights, transpose(&training_input), adjustments);
+        if (tr != NULL) {
+            free(tr);
+        }
+        tr = transpose(&training_input);
+        update_synaptic_weights(&synaptic_weights, tr, adjustments);
     }
     printf("Output:\n");
     mat_show(output);
@@ -164,8 +180,16 @@ int main (void) {
         1,
         1
     };
-    matrix_t test_input = { 1, 3, dtest_input};
+    matrix_t test_input = { 1, SIZE_OF_INPUT, dtest_input};
+    if (output != NULL) {
+        free(output);
+    }
     output = mat_mul(&test_input, &synaptic_weights);
     apply_sigmoid(output);
     mat_show(output);
+
+    free(output);
+    free(error);
+    free(adjustments);
+    free(tr);
 }
