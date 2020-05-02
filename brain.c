@@ -15,11 +15,11 @@ typedef struct neuron {
     double output;
 } neuron;
 
-static inline double sigmoid(double number) {
+double sigmoid(double number) {
     return (1 / (1 + exp(-number)));
 }
 
-static inline double sigmoid_derivative(double number) {
+double sigmoid_derivative(double number) {
     return number * (1 - number);
 }
 
@@ -30,11 +30,11 @@ void apply_sigmoid(matrix a) {
     }
 }
 
-static inline double get_random(double min, double max) {
+double get_random(double min, double max) {
     return (double)rand()/RAND_MAX*max+min;
 }
  
-static inline double dot(double *a, double *b, int len, int step) {
+double dot(double *a, double *b, int len, int step) {
 	double r = 0;
 	while (len--) {
 		r += *a++ * *b;
@@ -178,38 +178,4 @@ matrix run(matrix synaptic_weights, matrix test_input) {
     matrix output = mat_mul(test_input, synaptic_weights);
     apply_sigmoid(output);
     return output;
-}
-
-int main(void) {
-    int i;
-    double dtraining_input[] = {
-        0, 0, 1,
-        1, 1, 1,
-        1, 0, 1,
-        0, 1, 1
-    };
-    double dtraining_output[] = {
-        0,
-        1,
-        1,
-        0
-    };
-    double dtest_input[] = {
-        1,
-        1,
-        1
-    };
-    matrix_t training_input = { 4, 3, dtraining_input};
-    matrix_t training_output = { 4, 1, dtraining_output};
-    matrix_t test_input = { 1, 3, dtest_input};
-    double dsynaptic_weights[training_input.w];
-    for (i = 0; i < training_input.w; i++) {
-        dsynaptic_weights[i] = get_random(-1.0, 1.0);
-    }
-    matrix_t synaptic_weights = { training_input.w, 1, dsynaptic_weights};
-
-    train(&training_input, &training_output, &synaptic_weights, 20000);
-    matrix output = run(&synaptic_weights, &test_input);
-    mat_show(output);
-    free(output);
 }
