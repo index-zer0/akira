@@ -24,8 +24,6 @@ nn nn_constructor(int si, int sh, int so) {
 
     network->bias_ih = matrix_constructor(sh, 1);
     network->bias_ho = matrix_constructor(so, 1);
-    //memset(network->bias_ih, 1.0, sizeof(double) * sh);
-    //memset(network->bias_ho, 1.0, sizeof(double) * so);
 
     matrix_randomize(network->weights_ih, -1, 1);
     matrix_randomize(network->weights_ho, -1, 1);
@@ -70,7 +68,7 @@ void train(nn network, matrix training_input, matrix training_output) {
     matrix output_layer_error = matrix_constructor(training_output->rows, training_output->columns);
     memcpy(output_layer_error->p, training_output->p, sizeof(double) * output_layer_error->rows * output_layer_error->columns);
     // output output_layer_error
-    matrix_sub(output_layer_error, output_layer);
+    matrix_sub(output_layer_error, output_layer);////
     // gradient
     matrix_apply(output_layer, sigmoid_derivative);
     matrix_hadamard(output_layer, output_layer_error);
