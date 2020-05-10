@@ -66,7 +66,7 @@ int main(int argc, char **argv) {
         }
         
     }
-    nn network = nn_constructor(size_of_input, size_of_input, size_of_output);
+    nn network = nn_constructor(size_of_input, 64, size_of_output);
     matrix training_input = matrix_constructor(size_of_input, 1);
     matrix training_output = matrix_constructor(size_of_output, 1);
     for (i = 0; i < number_of_iteration; i++) {
@@ -84,13 +84,21 @@ int main(int argc, char **argv) {
     printf("Done training\n");
     //int correct = 0, wrong = 0;
     matrix output;
-    for (j = 0; j < train_number; j++) {
-        memcpy(training_input->p, &train_image[i][0], sizeof(double) * size_of_input);
+    for (j = 0; j < /*train_number*/2; j++) {
+        memcpy(training_input->p, &test_image[j][0], sizeof(double) * size_of_input);
         memcpy(training_output->p, dtraining_output + size_of_output * j, sizeof(double) * size_of_output);
         output = run(network, training_input);
-        printf("input %d:\n", test_label[j]);
-        matrix_print(output);
-        printf("\n");
+        printf("\ninput %d:\n", test_label[j]);
+        //matrix_print(output);
+        double max = -100.0;
+        int max_index = -1;
+        for (i = 0; i < output->rows; i++) {
+            if (output->p[i] > max) {
+                max = output->p[i];
+                max_index = i;
+            }
+        }
+        printf("prediction: %d\n", max_index);
         matrix_delete(output);
     }
 
