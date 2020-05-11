@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
     int i, j;
     const int size_of_input = 784;
     const int size_of_output = 10;
-    const int train_number = 100;
+    const int train_number = 1000;
     int number_of_iteration = 10;
     if (argc == 2) {
         number_of_iteration = atoi(argv[1]);
@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
     printf("Done training\n");
     //int correct = 0, wrong = 0;
     matrix output;
-    for (j = 0; j < /*train_number*/2; j++) {
+    for (j = 0; j < 10; j++) {
         memcpy(training_input->p, &test_image[j][0], sizeof(double) * size_of_input);
         memcpy(training_output->p, dtraining_output + size_of_output * j, sizeof(double) * size_of_output);
         output = run(network, training_input);
