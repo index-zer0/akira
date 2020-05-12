@@ -1,6 +1,6 @@
-OBJS	= neural_network.o cmatrix/cmatrix.o
-SOURCE	= neural_network.c cmatrix/cmatrix.c
-HEADER	= neural_network.h cmatrix/cmatrix.h
+OBJS	= akira.o cmatrix/cmatrix.o
+SOURCE	= akira.c cmatrix/cmatrix.c
+HEADER	= akira.h cmatrix/cmatrix.h
 OUT	= example
 CC	= gcc
 FLAGS	= -g -c
@@ -20,14 +20,14 @@ example_mnist: example_mnist.o $(OBJS)
 example_mnist.o: example_mnist.c
 	$(CC) $(FLAGS) example_mnist.c
 
-neural_network.o: neural_network.c
-	$(CC) $(FLAGS) neural_network.c 
+akira.o: akira.c
+	$(CC) $(FLAGS) akira.c 
 
 cmatrix.o: cmatrix/cmatrix.c
 	$(CC) $(FLAGS) cmatrix/cmatrix.c 
 
 clean:
-	rm -f example.o example_mnist.o $(OBJS) $(OUT)
+	rm -f example.o example_mnist.o  example_mnist $(OBJ) $(OUT)
 
 run: $(OUT)
 	./$(OUT)

@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include "neural_network.h"
+#include "akira.h"
 //https://github.com/takafumihoriuchi/MNIST_for_C/
 #include "MNIST_for_C/mnist.h"
 

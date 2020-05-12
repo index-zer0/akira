@@ -3,7 +3,7 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
-#include "neural_network.h"
+#include "akira.h"
 
 double sigmoid(double number) {
     return (1 / (1 + exp(-number)));

@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
-#include "neural_network.h"
+#include "akira.h"
 
 int main(void) {
     srand(time(0));
