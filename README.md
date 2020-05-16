@@ -2,6 +2,8 @@
 
 Akira is a C library for Neural Networks.
 
+![Akira logo](/public/a-logo.png)
+
 ## Installation
 
 (Bash script coming 🔜)
