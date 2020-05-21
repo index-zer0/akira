@@ -66,8 +66,8 @@ int main(int argc, char **argv) {
         }
         
     }
-    int sizes[3] = {size_of_input, 64, size_of_output};
-    nn network = nn_constructor(1, sizes);
+    int sizes[] = {size_of_input, 64, 32, size_of_output};
+    nn network = nn_constructor(2, sizes);
     matrix training_input = matrix_constructor(size_of_input, 1);
     matrix training_output = matrix_constructor(size_of_output, 1);
     for (i = 0; i < number_of_iteration; i++) {
@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
         printf("prediction: %d\n", max_index);
         matrix_delete(output);
     }
-
+    free(dtraining_output);
     matrix_delete(training_input);
     matrix_delete(training_output);
     nn_delete(network);
