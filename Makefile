@@ -27,7 +27,7 @@ cmatrix.o: cmatrix/cmatrix.c
 	$(CC) $(FLAGS) cmatrix/cmatrix.c 
 
 clean:
-	rm -f example.o example_mnist.o  example_mnist $(OBJ) $(OUT)
+	rm -f example.o example_mnist.o  example_mnist $(OBJ) $(OUT) *.o
 
 run: $(OUT)
 	./$(OUT)

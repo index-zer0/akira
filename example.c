@@ -13,7 +13,8 @@ int main(void) {
                                 0, 1 };
     double dtraining_output[] = { 1, 0, 0, 1 };
     int i, j;
-    nn network = nn_constructor(2, 2, 1);
+    int sizes[] = {2, 1};
+    nn network = nn_constructor(1, sizes);
     matrix training_input = matrix_constructor(2, 1);
     matrix training_output = matrix_constructor(1, 1);
     for (i = 0; i < 1000000; i++) {
