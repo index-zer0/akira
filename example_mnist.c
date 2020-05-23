@@ -66,7 +66,8 @@ int main(int argc, char **argv) {
         }
         
     }
-    int sizes[] = {size_of_input, 64, 32, size_of_output};
+    int sizes[] = {size_of_input, 128, 128, size_of_output};
+    //int sizes[] = {size_of_input, 64, size_of_output};
     nn network = nn_constructor(2, sizes);
     matrix training_input = matrix_constructor(size_of_input, 1);
     matrix training_output = matrix_constructor(size_of_output, 1);

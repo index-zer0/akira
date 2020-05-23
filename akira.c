@@ -112,7 +112,7 @@ void train(nn network, matrix training_input, matrix training_output) {
         if (i == 0) {
             layer_T = transpose(training_input);
         } else {
-            layer_T = transpose(hidden_layer[i]);
+            layer_T = transpose(hidden_layer[i-1]);
         }
         weights_delta = matrix_mult(hidden_layer[i], layer_T);
         matrix_delete(layer_T);
