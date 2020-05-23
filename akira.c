@@ -7,6 +7,7 @@
 #include "akira.h"
 
 int save_0_1_0(nn, const char *, const char *);
+nn load_0_1_0(const char *);
 
 static inline double sigmoid(double number) {
     return (1 / (1 + exp(-number)));
@@ -182,21 +183,6 @@ int save(nn network, const char *f_name, const char *notes, const char *file_ver
 }
 
 int save_0_1_0(nn network, const char *filename, const char *notes) {
-    /* 
-        file version
-        akira version
-        nn struct
-            weights0
-                weights0->p
-            bias0
-                bias0->p
-            ...
-            weightsn
-                weightsn->p
-            biasn
-                biasn->p
-        notes
-    */
     FILE *fp;
     int i;
     char akira_version[6], file_version[6];
@@ -206,16 +192,110 @@ int save_0_1_0(nn network, const char *filename, const char *notes) {
         printf("ERROR: Could not open file %s\n", filename);
         return 1;
     }
-    fwrite(&file_version, sizeof(char)*5, 1, fp);
-    fwrite(&akira_version, sizeof(char)*5, 1, fp);
-    fwrite(network, sizeof(network), 1, fp);
+    fwrite(&file_version, sizeof(char), 5, fp);
+    fwrite(&akira_version, sizeof(char), 5, fp);
+    fwrite(&(network->hidden_num), sizeof(int), 1, fp);
+    fwrite(&(network->lr), sizeof(double), 1, fp);
+    printf("%d\n", (int)sizeof(*network));
     for (i = 0; i < network->hidden_num + 1; i++) { // + 1 because of the input layer
-        fwrite(network->weights[i], sizeof(network->weights[i]), 1, fp);
-        fwrite(network->weights[i]->p, sizeof(double) * network->weights[i]->rows * network->weights[i]->columns, 1, fp);
+        fwrite(&(network->weights[i]->rows), sizeof(int), 1, fp);
+        fwrite(&(network->weights[i]->columns), sizeof(int), 1, fp);
+        fwrite(network->weights[i]->p, sizeof(double), network->weights[i]->rows * network->weights[i]->columns, fp);
+        fwrite(&(network->bias[i]->rows), sizeof(int), 1, fp);
+        fwrite(&(network->bias[i]->columns), sizeof(int), 1, fp);
         fwrite(network->bias[i], sizeof(network->bias[i]), 1, fp);
-        fwrite(network->bias[i]->p, sizeof(double) * network->bias[i]->rows * network->bias[i]->columns, 1, fp);
+        fwrite(network->bias[i]->p, sizeof(double), network->bias[i]->rows * network->bias[i]->columns, fp);
     }
-    fwrite(notes, sizeof(char), strlen(notes), fp);
+    if (strlen(notes) > 256) {
+        printf("Warning: Max size of \'notes\' is 256\n");
+    }
+    fwrite(notes, sizeof(char), 256, fp);
     fclose(fp);
     return 0;
+}
+
+nn load(const char *filename) {
+    int i;
+    FILE *fp;
+    char file_version[6], akira_version[6];
+    if (access(filename, F_OK) == -1) {
+        printf("File %s does not exist\n", filename);
+        return NULL;
+    }
+    if ((fp = fopen(filename, "rb")) == NULL) {
+        printf("ERROR: Could not open file %s\n", filename);
+        return NULL;
+    }
+    fread(file_version, sizeof(char), 5, fp);
+    file_version[5] = '\0';
+    fread(akira_version, sizeof(char), 5, fp);
+    akira_version[5] = '\0';
+    fclose(fp);
+    if (strcmp(akira_version, AKIRA_VERSION) != 0) {
+        printf("ERROR: the file is ment for akira version %s\n", akira_version);
+    }
+    if (strcmp(file_version, FILE_VERSION) != 0) {
+        printf("Warning: Not the current file version (%s)\n", file_version);
+    }
+    if (strcmp(file_version, "0.1.0") == 0) {
+        return load_0_1_0(filename);
+    } else {
+        printf("ERROR: Unknown file vesrion %s.\n", file_version);
+        return NULL;
+    }
+    return NULL;
+}
+
+nn load_0_1_0(const char *filename) {
+    FILE *fp;
+    int i, j;
+    char *line;
+    char akira_version[6], file_version[6];
+    if ((fp = fopen(filename, "rb")) == NULL) {
+        printf("ERROR: Could not open file %s\n", filename);
+        return NULL;
+    }
+    nn network = malloc(sizeof(_nn));
+    fread(file_version, sizeof(char), 5, fp);
+    file_version[5] = '\0';
+    fread(akira_version, sizeof(char), 5, fp);
+    akira_version[5] = '\0';
+    line = malloc(sizeof(int));
+    fread(line, sizeof(int), 1, fp);
+    sscanf(line, "%d", &(network->hidden_num));
+    line = realloc(line, sizeof(double));
+
+    printf("%s %s %d\n", file_version, akira_version, network->hidden_num);
+
+    fread(line, sizeof(double), 1, fp);
+    sscanf(line, "%lf", &(network->lr));
+
+    network->weights = malloc(sizeof(matrix) * (network->hidden_num+1));
+    network->bias = malloc(sizeof(matrix) * (network->hidden_num+1));
+
+    for (i = 0; i < network->hidden_num + 1; i++) {
+        fread(&(network->weights[i]->rows), sizeof(int), 1, fp);
+        fread(&(network->weights[i]->columns), sizeof(int), 1, fp);
+        network->weights[i]->p = malloc(sizeof(double) * network->weights[i]->rows * network->weights[i]->columns);
+        for (j = 0; j < network->weights[i]->rows * network->weights[i]->columns; j++) {
+            fread(line, sizeof(double), 1, fp);
+            fread(network->weights[i]->p, sizeof(double), 1, fp);
+            sscanf(line, "%lf", &(network->weights[i]->p[j]));
+        }
+        fread(&(network->bias[i]->rows), sizeof(int), 1, fp);
+        fread(&(network->bias[i]->columns), sizeof(int), 1, fp);
+        network->bias[i]->p = malloc(sizeof(double) * network->bias[i]->rows * network->bias[i]->columns);
+        for (j = 0; j < network->bias[i]->rows * network->bias[i]->columns; j++) {
+            fread(line, sizeof(double), 1, fp);
+            fread(network->bias[i]->p, sizeof(double), 1, fp);
+            sscanf(line, "%lf", &(network->bias[i]->p[j]));
+        }
+    }
+    line = realloc(line, sizeof(char) + 257);
+    fread(line, sizeof(char), 256, fp);
+    line[257] = '\0';
+    printf("#############\nNote:\n%s\n#############\n", line);
+    free(line);
+    fclose(fp);
+    return network;
 }

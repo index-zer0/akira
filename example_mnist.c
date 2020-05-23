@@ -103,8 +103,28 @@ int main(int argc, char **argv) {
     if (save(network, "model", "just some notes", FILE_VERSION) != 0) {
         printf("File was not saved\n");
     }
+    
+    nn_delete(network);
+    network = load("model.akr");
+
+    for (j = 0; j < 10; j++) {
+        memcpy(training_input->p, &test_image[j][0], sizeof(double) * size_of_input);
+        memcpy(training_output->p, dtraining_output + size_of_output * j, sizeof(double) * size_of_output);
+        output = run(network, training_input);
+        printf("\ninput %d:\n", test_label[j]);
+        double max = -100.0;
+        int max_index = -1;
+        for (i = 0; i < output->rows; i++) {
+            if (output->p[i] > max) {
+                max = output->p[i];
+                max_index = i;
+            }
+        }
+        printf("prediction: %d\n", max_index);
+        matrix_delete(output);
+    }
     free(dtraining_output);
     matrix_delete(training_input);
     matrix_delete(training_output);
-    nn_delete(network);
+    return 0;
 }
