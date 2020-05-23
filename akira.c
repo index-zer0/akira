@@ -3,7 +3,10 @@
 #include <string.h>
 #include <math.h>
 #include <time.h>
+#include <unistd.h>
 #include "akira.h"
+
+int save_0_1_0(nn, const char *, const char *);
 
 static inline double sigmoid(double number) {
     return (1 / (1 + exp(-number)));
@@ -13,7 +16,7 @@ static inline double sigmoid_derivative(double number) {
     return number * (1 - number);
 }
 
-nn nn_constructor(const int hidden_num, const int *sizes) { //(int si, int sh, int so) {
+nn nn_constructor(const int hidden_num, const int *sizes) {
     int i;
     nn network = malloc(sizeof(_nn));
     network->hidden_num = hidden_num;
@@ -78,7 +81,7 @@ void train(nn network, matrix training_input, matrix training_output) {
         matrix_add(hidden_layer[i], network->bias[i]);
         matrix_apply(hidden_layer[i], sigmoid);
     }
-    output_layer = matrix_mult(network->weights[network->hidden_num], hidden_layer[network->hidden_num-1]); //////
+    output_layer = matrix_mult(network->weights[network->hidden_num], hidden_layer[network->hidden_num-1]);
     matrix_add(output_layer, network->bias[network->hidden_num]);
     matrix_apply(output_layer, sigmoid);
 
@@ -137,4 +140,82 @@ void train(nn network, matrix training_input, matrix training_output) {
     matrix_delete(weights_ho_delta);
     matrix_delete(output_layer);
     matrix_delete(output_layer_error);
+}
+
+int save(nn network, const char *f_name, const char *notes, const char *file_version) {
+    char *filename = malloc(sizeof(char) * (strlen(f_name) + 1));
+    strcpy(filename, f_name);
+    char *ext = strrchr(filename, '.');
+    char a;
+    int rtn = 1;
+    char *temp;
+    if (ext && (strcmp(ext + 1, ".akr") != 0)) {
+        printf("Warning: akira models use the .akr extension\n");
+    } else if (!ext) {
+        filename = realloc(filename, strlen(filename) + 5);
+        strcat(filename, ".akr");
+    }
+    while (access(filename, F_OK) != -1) {
+        printf("File %s exists\nDo you want to overwrite it? (y/n)\n", filename);
+        scanf(" %c", &a);
+        if (a == 'y' || a == 'Y') {
+            break;
+        }
+        if (a != 'y') {
+            temp = malloc(sizeof(char) * (strlen(filename) + 2));
+            strcpy(temp, filename);
+            filename = realloc(filename, strlen(filename) + strlen("copy_") + 1);
+            strcpy(filename, "copy_");
+            strcat(filename, temp);
+            free(temp);
+        }
+    }
+    
+    if (file_version == NULL || strcmp(file_version, FILE_VERSION) == 0) {
+        rtn = save_0_1_0(network, filename, notes);
+    } else {
+        printf("Unknown file vesrion %s. Use latest %s instead?\n", file_version, FILE_VERSION);
+        rtn = save_0_1_0(network, filename, notes);
+    }
+    free(filename);
+    return rtn;
+}
+
+int save_0_1_0(nn network, const char *filename, const char *notes) {
+    /* 
+        file version
+        akira version
+        nn struct
+            weights0
+                weights0->p
+            bias0
+                bias0->p
+            ...
+            weightsn
+                weightsn->p
+            biasn
+                biasn->p
+        notes
+    */
+    FILE *fp;
+    int i;
+    char akira_version[6], file_version[6];
+    strcpy(akira_version, AKIRA_VERSION);
+    strcpy(file_version, FILE_VERSION);
+    if ((fp = fopen(filename, "wb")) == NULL) {
+        printf("ERROR: Could not open file %s\n", filename);
+        return 1;
+    }
+    fwrite(&file_version, sizeof(char)*5, 1, fp);
+    fwrite(&akira_version, sizeof(char)*5, 1, fp);
+    fwrite(network, sizeof(network), 1, fp);
+    for (i = 0; i < network->hidden_num + 1; i++) { // + 1 because of the input layer
+        fwrite(network->weights[i], sizeof(network->weights[i]), 1, fp);
+        fwrite(network->weights[i]->p, sizeof(double) * network->weights[i]->rows * network->weights[i]->columns, 1, fp);
+        fwrite(network->bias[i], sizeof(network->bias[i]), 1, fp);
+        fwrite(network->bias[i]->p, sizeof(double) * network->bias[i]->rows * network->bias[i]->columns, 1, fp);
+    }
+    fwrite(notes, sizeof(char), strlen(notes), fp);
+    fclose(fp);
+    return 0;
 }

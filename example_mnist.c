@@ -67,7 +67,6 @@ int main(int argc, char **argv) {
         
     }
     int sizes[] = {size_of_input, 128, 128, size_of_output};
-    //int sizes[] = {size_of_input, 64, size_of_output};
     nn network = nn_constructor(2, sizes);
     matrix training_input = matrix_constructor(size_of_input, 1);
     matrix training_output = matrix_constructor(size_of_output, 1);
@@ -84,14 +83,12 @@ int main(int argc, char **argv) {
         //}
     }
     printf("Done training\n");
-    //int correct = 0, wrong = 0;
     matrix output;
     for (j = 0; j < 10; j++) {
         memcpy(training_input->p, &test_image[j][0], sizeof(double) * size_of_input);
         memcpy(training_output->p, dtraining_output + size_of_output * j, sizeof(double) * size_of_output);
         output = run(network, training_input);
         printf("\ninput %d:\n", test_label[j]);
-        //matrix_print(output);
         double max = -100.0;
         int max_index = -1;
         for (i = 0; i < output->rows; i++) {
@@ -102,6 +99,9 @@ int main(int argc, char **argv) {
         }
         printf("prediction: %d\n", max_index);
         matrix_delete(output);
+    }
+    if (save(network, "model", "just some notes", FILE_VERSION) != 0) {
+        printf("File was not saved\n");
     }
     free(dtraining_output);
     matrix_delete(training_input);
