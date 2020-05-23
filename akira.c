@@ -5,106 +5,136 @@
 #include <time.h>
 #include "akira.h"
 
-double sigmoid(double number) {
+static inline double sigmoid(double number) {
     return (1 / (1 + exp(-number)));
 }
 
-double sigmoid_derivative(double number) {
+static inline double sigmoid_derivative(double number) {
     return number * (1 - number);
 }
 
-nn nn_constructor(int si, int sh, int so) {
+nn nn_constructor(const int hidden_num, const int *sizes) { //(int si, int sh, int so) {
+    int i;
     nn network = malloc(sizeof(_nn));
-    network->input = si;
-    network->hidden = sh;
-    network->output = so;
+    network->hidden_num = hidden_num;
 
-    network->weights_ih = matrix_constructor(sh, si);
-    network->weights_ho = matrix_constructor(so, sh);
+    network->weights = malloc(sizeof(matrix) * (network->hidden_num+1));
+    network->bias = malloc(sizeof(matrix) * (network->hidden_num+1));
 
-    network->bias_ih = matrix_constructor(sh, 1);
-    network->bias_ho = matrix_constructor(so, 1);
-
-    matrix_randomize(network->weights_ih, -1, 1);
-    matrix_randomize(network->weights_ho, -1, 1);
-    matrix_randomize(network->bias_ih, -1, 1);
-    matrix_randomize(network->bias_ho, -1, 1);
+    for (i = 0; i < network->hidden_num + 1; i++) { // + 1 because of the input layer
+        network->weights[i] = matrix_constructor(sizes[i+1], sizes[i]);
+        network->bias[i] = matrix_constructor(sizes[i+1], 1);
+        matrix_randomize(network->weights[i], -1, 1);
+        matrix_randomize(network->bias[i], -1, 1);
+    }
     network->lr = 0.1;
 
     return network;
 }
 
 void nn_delete(nn network) {
-    matrix_delete(network->weights_ih);
-    matrix_delete(network->weights_ho);
-    matrix_delete(network->bias_ih);
-    matrix_delete(network->bias_ho);
+    int i;
+    for (i = 0; i < network->hidden_num + 1; i++) {
+        matrix_delete(network->weights[i]);
+        matrix_delete(network->bias[i]);
+    }
+    free(network->weights);
+    free(network->bias);
     free(network);
 }
 
 matrix run(nn network, matrix input) {
-    matrix hidden_layer = matrix_mult(network->weights_ih, input);
-    matrix_add(hidden_layer, network->bias_ih);
+    int i = 0;
+    matrix hidden_layer[network->hidden_num];
+    for (i = 0; i < network->hidden_num; i++) {
+        if (i != 0) {
+            hidden_layer[i] = matrix_mult(network->weights[i], hidden_layer[i-1]);
+        } else {
+            hidden_layer[0] = matrix_mult(network->weights[0], input);
+        }
+        matrix_add(hidden_layer[i], network->bias[i]);
+        matrix_apply(hidden_layer[i], sigmoid);
+    }
 
-    matrix_apply(hidden_layer, sigmoid);
-
-    matrix output_layer = matrix_mult(network->weights_ho, hidden_layer);
-    matrix_add(output_layer, network->bias_ho);
+    matrix output_layer = matrix_mult(network->weights[network->hidden_num], hidden_layer[network->hidden_num-1]);
+    matrix_add(output_layer, network->bias[network->hidden_num]);
     matrix_apply(output_layer, sigmoid);
-    matrix_delete(hidden_layer);
+    for (i = 0; i < network->hidden_num; i++) {
+        matrix_delete(hidden_layer[i]);
+    }
     return output_layer;
 }
 
 void train(nn network, matrix training_input, matrix training_output) {
-    matrix hidden_layer = matrix_mult(network->weights_ih, training_input);
-    matrix_add(hidden_layer, network->bias_ih);
-
-    matrix_apply(hidden_layer, sigmoid);
-
-    matrix output_layer = matrix_mult(network->weights_ho, hidden_layer);
-    matrix_add(output_layer, network->bias_ho);
+    int i = 0;
+    matrix weights_T, weights_ho_delta, hidden_layer_T, last_layer_error, last_layer_error_temp, weights_delta, layer_T, output_layer, output_layer_error;
+    matrix hidden_layer[network->hidden_num];
+    for (i = 0; i < network->hidden_num; i++) {
+        if (i != 0) {
+            hidden_layer[i] = matrix_mult(network->weights[i], hidden_layer[i-1]);
+        } else {
+            hidden_layer[0] = matrix_mult(network->weights[0], training_input);
+        }
+        matrix_add(hidden_layer[i], network->bias[i]);
+        matrix_apply(hidden_layer[i], sigmoid);
+    }
+    output_layer = matrix_mult(network->weights[network->hidden_num], hidden_layer[network->hidden_num-1]); //////
+    matrix_add(output_layer, network->bias[network->hidden_num]);
     matrix_apply(output_layer, sigmoid);
 
-    matrix output_layer_error = matrix_constructor(training_output->rows, training_output->columns);
+    output_layer_error = matrix_constructor(training_output->rows, training_output->columns);
     memcpy(output_layer_error->p, training_output->p, sizeof(double) * output_layer_error->rows * output_layer_error->columns);
     // output output_layer_error
-    matrix_sub(output_layer_error, output_layer);////
+    matrix_sub(output_layer_error, output_layer);
+
     // gradient
     matrix_apply(output_layer, sigmoid_derivative);
     matrix_hadamard(output_layer, output_layer_error);
     matrix_scalar_mult(output_layer, network->lr);
-
-    // deltas
-    matrix hidden_layer_T = transpose(hidden_layer);
-    matrix weights_ho_delta = matrix_mult(output_layer, hidden_layer_T);
-
+    // delta
+    hidden_layer_T = transpose(hidden_layer[network->hidden_num-1]);
+    weights_ho_delta = matrix_mult(output_layer, hidden_layer_T);
+    matrix_delete(hidden_layer_T);
     // adjustments
-    matrix_add(network->weights_ho, weights_ho_delta);
-    matrix_add(network->bias_ho, output_layer);
+    matrix_add(network->weights[network->hidden_num], weights_ho_delta);
+    matrix_add(network->bias[network->hidden_num], output_layer);
 
-    matrix weights_ho_T = transpose(network->weights_ho);
-    matrix hidden_layer_error = matrix_mult(weights_ho_T, output_layer_error);
+    weights_T = transpose(network->weights[network->hidden_num]);
+    last_layer_error = matrix_mult(weights_T, output_layer_error);
+    matrix_delete(weights_T);
+    for (i = network->hidden_num-1; i >= 0; i--) {
+        // gradient
+        matrix_apply(hidden_layer[i], sigmoid_derivative);
+        matrix_hadamard(hidden_layer[i], last_layer_error);
+        matrix_scalar_mult(hidden_layer[i], network->lr);
 
-    // gradient hidden
-    matrix_apply(hidden_layer, sigmoid_derivative);
-    matrix_hadamard(hidden_layer, hidden_layer_error);
-    matrix_scalar_mult(hidden_layer, network->lr);
+        // deltas
+        if (i == 0) {
+            layer_T = transpose(training_input);
+        } else {
+            layer_T = transpose(hidden_layer[i-1]);
+        }
+        weights_delta = matrix_mult(hidden_layer[i], layer_T);
+        matrix_delete(layer_T);
+        // adjustments
+        matrix_add(network->weights[i], weights_delta);
+        matrix_add(network->bias[i], hidden_layer[i]);
+        matrix_delete(weights_delta);
 
-    // deltas hidden
-    matrix input_layer_T = transpose(training_input);
-    matrix weights_ih_delta = matrix_mult(hidden_layer, input_layer_T);
+        weights_T = transpose(network->weights[i]);
+        last_layer_error_temp = matrix_constructor(last_layer_error->rows, last_layer_error->columns);
+        memcpy(last_layer_error_temp->p, last_layer_error->p, sizeof(double) * last_layer_error_temp->rows * last_layer_error_temp->columns);
+        matrix_delete(last_layer_error);
+        last_layer_error = matrix_mult(weights_T, last_layer_error_temp);
+        matrix_delete(last_layer_error_temp);
+        matrix_delete(weights_T);
 
-    // adjustments hidden
-    matrix_add(network->weights_ih, weights_ih_delta);
-    matrix_add(network->bias_ih, hidden_layer);
-
+    }
+    for (i = 0; i < network->hidden_num; i++) {
+        matrix_delete(hidden_layer[i]);
+    }
+    matrix_delete(last_layer_error);
+    matrix_delete(weights_ho_delta);
     matrix_delete(output_layer);
     matrix_delete(output_layer_error);
-    matrix_delete(weights_ho_T);
-    matrix_delete(hidden_layer_error);
-    matrix_delete(hidden_layer);
-    matrix_delete(hidden_layer_T);
-    matrix_delete(weights_ho_delta);
-    matrix_delete(input_layer_T);
-    matrix_delete(weights_ih_delta);
 }

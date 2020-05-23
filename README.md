@@ -2,18 +2,20 @@
 
 Akira is a C library for Neural Networks.
 
-![Akira logo](/public/a-logo.png)
+<img src="/public/a-logo.png" alt="Akira logo" width=342 height=350/>
 
 ## Installation
 
-(Bash script coming 🔜)
+If you are on Linux use can use the `install.sh` script.
+
+The `install.sh` script will install - compile __akira__ and its dependencies alongside the dependencies for all the examples.
 
 Clone this repository
 
 ```bash
 git clone https://github.com/index-zer0/akira.git
 ```
-Clone the dependencies 
+Clone the dependencies (or use the `install.sh` script)
 ```bash
 cd akira
 git clone https://github.com/index-zer0/cmatrix.git
@@ -24,7 +26,7 @@ git clone https://github.com/takafumihoriuchi/MNIST_for_C/
 
 
 ## Usage
-Include *Akira* in your program
+Include __akira__ in your program
 
 ```C
 #include "akira.h"
