@@ -126,5 +126,6 @@ int main(int argc, char **argv) {
     free(dtraining_output);
     matrix_delete(training_input);
     matrix_delete(training_output);
+    nn_delete(network);
     return 0;
 }
