@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include "akira.h"
+#include "../src/akira.h"
 //https://github.com/takafumihoriuchi/MNIST_for_C/
-#include "MNIST_for_C/mnist.h"
+#include "../MNIST_for_C/mnist.h"
 
 double zero[10] =  {1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 double one[10] =   {0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
@@ -67,7 +67,6 @@ int main(int argc, char **argv) {
         
     }
     int sizes[] = {size_of_input, 128, 128, size_of_output};
-    //int sizes[] = {size_of_input, 64, size_of_output};
     nn network = nn_constructor(2, sizes);
     matrix training_input = matrix_constructor(size_of_input, 1);
     matrix training_output = matrix_constructor(size_of_output, 1);
@@ -84,14 +83,35 @@ int main(int argc, char **argv) {
         //}
     }
     printf("Done training\n");
-    //int correct = 0, wrong = 0;
     matrix output;
     for (j = 0; j < 10; j++) {
         memcpy(training_input->p, &test_image[j][0], sizeof(double) * size_of_input);
         memcpy(training_output->p, dtraining_output + size_of_output * j, sizeof(double) * size_of_output);
         output = run(network, training_input);
         printf("\ninput %d:\n", test_label[j]);
-        //matrix_print(output);
+        double max = -100.0;
+        int max_index = -1;
+        for (i = 0; i < output->rows; i++) {
+            if (output->p[i] > max) {
+                max = output->p[i];
+                max_index = i;
+            }
+        }
+        printf("prediction: %d\n", max_index);
+        matrix_delete(output);
+    }
+    if (save(network, "model", "just some notes", FILE_VERSION) != 0) {
+        printf("File was not saved\n");
+    }
+    
+    nn_delete(network);
+    network = load("model.akr");
+
+    for (j = 0; j < 10; j++) {
+        memcpy(training_input->p, &test_image[j][0], sizeof(double) * size_of_input);
+        memcpy(training_output->p, dtraining_output + size_of_output * j, sizeof(double) * size_of_output);
+        output = run(network, training_input);
+        printf("\ninput %d:\n", test_label[j]);
         double max = -100.0;
         int max_index = -1;
         for (i = 0; i < output->rows; i++) {
@@ -107,4 +127,5 @@ int main(int argc, char **argv) {
     matrix_delete(training_input);
     matrix_delete(training_output);
     nn_delete(network);
+    return 0;
 }
