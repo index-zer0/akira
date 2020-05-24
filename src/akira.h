@@ -1,7 +1,7 @@
 #define AKIRA_VERSION "0.1.0"
 #define FILE_VERSION "0.1.0"
 
-#include "./cmatrix/cmatrix.h"
+#include "../cmatrix/cmatrix.h"
 
 typedef struct nn {
     matrix *weights;

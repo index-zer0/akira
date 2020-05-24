@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string.h>
-#include "akira.h"
+#include "../src/akira.h"
 
 int main(void) {
     srand(time(0));

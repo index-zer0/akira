@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include "akira.h"
+#include "../src/akira.h"
 //https://github.com/takafumihoriuchi/MNIST_for_C/
-#include "MNIST_for_C/mnist.h"
+#include "../MNIST_for_C/mnist.h"
 
 double zero[10] =  {1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 double one[10] =   {0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
