@@ -22,10 +22,21 @@ directory = os.path.dirname(os.path.realpath(__file__)) + "/images"
 if not os.path.exists(directory):
     os.makedirs(directory)
 
+f = open("images_info.txt", "w")
 i = 0
 for content in tqdm(data):
     response = requests.get(content['content'])
-    img = Image.open(BytesIO(response.content))
+    img = Image.open(BytesIO(response.content)).convert('RGB')
     images.append([img, content['annotation']])
     img.save(directory + "/img" + str(i).zfill(4) + ".png")
+
+    pixel_values = np.asarray(img)
+    np.savetxt(directory + "/img" + str(i).zfill(4) + ".txt", pixel_values.ravel(), fmt='%d', delimiter=',')
+
+    f.write('%s' % str(i).zfill(4))
+    for face in content['annotation']:
+        for point in face['points']:
+            f.write(',{},{}'.format(point['x'], point['y']))
+    f.write('\n')
     i = i + 1
+f.close()
