@@ -59,3 +59,5 @@ example
 example_mnist
 *.akr
 examples/recognition/images
+images_info.txt
+pixel_data.csv

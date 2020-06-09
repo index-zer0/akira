@@ -28,7 +28,7 @@ for content in tqdm(data):
     response = requests.get(content['content'])
     img = Image.open(BytesIO(response.content)).convert('RGB')
     images.append([img, content['annotation']])
-    img = img.resize((400, 400))
+    img = img.resize((224, 224))
     img.save(directory + "/img" + str(i).zfill(4) + ".png")
 
     pixel_values = np.asarray(img)

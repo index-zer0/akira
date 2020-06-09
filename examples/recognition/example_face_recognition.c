@@ -9,7 +9,7 @@ int main(int argc, char **argv) {
     double value;
     char number[5] = {'\0'}, image[150] = {'\0'};
     FILE *fp, *img;
-    const int size_of_input = 400*400*3;
+    const int size_of_input = 224*224*3;
     const int size_of_output = 5;
     const int train_number = 100;
     int number_of_iteration = 10;
@@ -20,9 +20,8 @@ int main(int argc, char **argv) {
     if (argc == 2) {
         number_of_iteration = atoi(argv[1]);
     }
-    int sizes[] = {size_of_input, 64, 192, 128, 256, 256, 512, 256, 512, 256, 512, 256, 512, 256, 512, 512, 1024, 512, \
-        1024, 512, 1024, 1024, 1024, 1024, 256, size_of_output};
-    nn network = nn_constructor(24, sizes);
+    int sizes[] = {size_of_input, 4096, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 512, size_of_output};
+    nn network = nn_constructor(9, sizes);
 
     if ((fp = fopen("./examples/recognition/images_info.txt", "r")) == NULL) {
         printf("ERROR: Could not open file images_info.txt\n");
@@ -42,7 +41,7 @@ int main(int argc, char **argv) {
                 i++;
             }
         }
-        if (i > 5) {
+        if (i >= 5) {
             training_output->p[0] = 1;
         } else {
             training_output->p[0] = 0;
