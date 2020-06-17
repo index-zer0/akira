@@ -6,7 +6,7 @@ Akira is a C library for Neural Networks.
 
 ## Installation
 
-If you are on Linux use can use the `install.sh` script.
+If you are on Linux you can use the `install.sh` script.
 
 The `install.sh` script will install - compile __akira__ and its dependencies alongside the dependencies for all the examples.
 
