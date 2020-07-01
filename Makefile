@@ -3,10 +3,10 @@ SOURCE	= src/akira.c cmatrix/cmatrix.c
 HEADER	= src/akira.h cmatrix/cmatrix.h
 OUT	= example
 CC	= gcc
-FLAGS	= -g -c -O3
+FLAGS	= -g -c # -O3
+SHARED = -fPIC -shared
 LFLAGS	= -lm
-
-all: example example_mnist
+all: example example_mnist akira.so
 
 example: example.o $(OBJS)
 	$(CC) -g example.o $(OBJS) -o $(OUT) $(LFLAGS)
@@ -26,8 +26,16 @@ akira.o: src/akira.c
 cmatrix.o: cmatrix/cmatrix.c
 	$(CC) $(FLAGS) cmatrix/cmatrix.c 
 
+# shared libraries
+
+akira.so: cmatrix.so src/akira.c
+	cc $(SHARED) -o akira.so src/akira.c -L. -l:./cmatrix.so
+
+cmatrix.so: cmatrix/cmatrix.c
+	cc $(SHARED) -o cmatrix.so cmatrix/cmatrix.c
+
 clean:
-	rm -f example.o example_mnist.o  example_mnist $(OBJ) $(OUT) *.o
+	rm -f example.o example_mnist.o example_mnist $(OBJ) $(OUT) *.o *.so cmatrix/*.o cmatrix/*.so
 
 run: $(OUT)
 	./$(OUT)

@@ -58,4 +58,5 @@ MNIST_for_C
 example
 example_mnist
 *.akr
-examples/recognition/
+examples/recognition
+examples/RoadMarkingDataset
