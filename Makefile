@@ -3,7 +3,7 @@ SOURCE	= src/akira.c cmatrix/cmatrix.c
 HEADER	= src/akira.h cmatrix/cmatrix.h
 OUT	= example
 CC	= gcc
-FLAGS	= -g -c
+FLAGS	= -g -c -O3
 LFLAGS	= -lm
 
 all: example example_mnist
