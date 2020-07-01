@@ -158,7 +158,9 @@ int save(nn network, const char *f_name, const char *notes, const char *file_ver
     }
     while (access(filename, F_OK) != -1) {
         printf("File %s exists\nDo you want to overwrite it? (y/n)\n", filename);
-        scanf(" %c", &a);
+        if (scanf(" %c", &a) < 0) {
+            exit(-1);
+        }
         if (a == 'y' || a == 'Y') {
             break;
         }
@@ -221,7 +223,9 @@ nn load(const char *filename) {
         printf("ERROR: Could not open file %s\n", filename);
         return NULL;
     }
-    fscanf(fp, "%s %s\n", file_version, akira_version);
+    if (fscanf(fp, "%s %s\n", file_version, akira_version) < 0) {
+        exit(-1);
+    }
     fclose(fp);
     if (strcmp(akira_version, AKIRA_VERSION) != 0) {
         printf("ERROR: the file is ment for akira version %s\n", akira_version);
@@ -248,24 +252,34 @@ nn load_0_1_0(const char *filename) {
         return NULL;
     }
     nn network = malloc(sizeof(_nn));
-    fscanf(fp, "%s %s\n", file_version, akira_version);
-    fscanf(fp, "%d %lf\n", &(network->hidden_num), &(network->lr));
+    if (fscanf(fp, "%s %s\n", file_version, akira_version) < 0) {
+        exit(-1);
+    }
+    if (fscanf(fp, "%d %lf\n", &(network->hidden_num), &(network->lr)) < 0) {
+        exit(-1);
+    }
 
     network->weights = malloc(sizeof(matrix) * (network->hidden_num+1));
     network->bias = malloc(sizeof(matrix) * (network->hidden_num+1));
     printf("%s %s %d %lf\n", file_version, akira_version, network->hidden_num, network->lr);
     for (i = 0; i < network->hidden_num + 1; i++) {
         network->weights[i] = malloc(sizeof(_matrix));
-        fscanf(fp, "%d %d\n", &(network->weights[i]->rows), &(network->weights[i]->columns));
+        if (fscanf(fp, "%d %d\n", &(network->weights[i]->rows), &(network->weights[i]->columns)) < 0) {
+            exit(-1);
+        }
         network->weights[i]->p = malloc(sizeof(double) * network->weights[i]->rows * network->weights[i]->columns);
         for (j = 0; j < network->weights[i]->rows * network->weights[i]->columns; j++) {
             fscanf(fp, "%lf ", &(network->weights[i]->p[j]));
         }
         network->bias[i] = malloc(sizeof(_matrix));
-        fscanf(fp, "\n%d %d\n", &(network->bias[i]->rows), &(network->bias[i]->columns));
+        if (fscanf(fp, "\n%d %d\n", &(network->bias[i]->rows), &(network->bias[i]->columns)) < 0) {
+            exit(-1);
+        }
         network->bias[i]->p = malloc(sizeof(double) * network->bias[i]->rows * network->bias[i]->columns);
         for (j = 0; j < network->bias[i]->rows * network->bias[i]->columns; j++) {
-            fscanf(fp, "%lf ", &(network->bias[i]->p[j]));
+            if (fscanf(fp, "%lf ", &(network->bias[i]->p[j])) < 0) {
+                exit(-1);
+            }
         }
     }
     printf("#############\nNote:\n");
