@@ -14,14 +14,15 @@ int main(int argc, char **argv) {
     const int train_number = 100;
     int number_of_iteration = 10;
     int face_exists = 0;
+    nn network;
     matrix training_input = matrix_constructor(size_of_input, 1);
     matrix training_output = matrix_constructor(size_of_output, 1);
     memset(training_output->p, 0.0, sizeof(double) * size_of_output);
     if (argc == 2) {
         number_of_iteration = atoi(argv[1]);
     }
-    int sizes[] = {size_of_input, 4096, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 512, size_of_output};
-    nn network = nn_constructor(9, sizes);
+    /*int sizes[] = {size_of_input, 4096, 1024, 1024, 1024, 1024, 1024, 1024, 1024, 512, size_of_output};
+    network = nn_constructor(9, sizes);
 
     if ((fp = fopen("./examples/recognition/images_info.txt", "r")) == NULL) {
         printf("ERROR: Could not open file images_info.txt\n");
@@ -54,15 +55,14 @@ int main(int argc, char **argv) {
         i = 0;
         while (fscanf(img, "%d\n", &value_int) != 0 && i < size_of_input) {
             training_input->p[i] = (double)value_int/255.0;
-            /*if (i%100000 == 0) {
-                printf("%d: %lf\n", i, training_input->p[i]);
-            }*/
             i++;
         }
         fclose(img);
         train(network, training_input, training_output);
     } while (fscanf(fp, "\n%4s", number) != EOF && number_of_iteration--);
     fclose(fp);
+    */
+    network = load("face_recognition.akr");
     if ((img = fopen("./examples/recognition/images/img0000.txt", "r")) == NULL) {
         printf("ERROR: Could not open file %s\n", image);
         return 1;
@@ -77,8 +77,11 @@ int main(int argc, char **argv) {
     for (i = 0; i < output->rows * output->columns; i++) {
         printf("%lf\n", output->p[i]);
     }
+    /*if (save(network, "face_recognition", "409 photos * 1 time", FILE_VERSION) != 0) {
+        printf("File was not saved\n");
+    }*/
     nn_delete(network);
     matrix_delete(training_input);
-    matrix_delete(training_output);
+    //matrix_delete(training_output);
     return 0;
 }
