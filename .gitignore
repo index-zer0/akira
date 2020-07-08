@@ -60,3 +60,5 @@ example_mnist
 *.akr
 examples/recognition
 examples/RoadMarkingDataset
+example_road
+examples/drive_data/

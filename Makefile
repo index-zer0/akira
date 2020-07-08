@@ -6,7 +6,7 @@ CC	= gcc
 FLAGS	= -g -c # -O3
 SHARED = -fPIC -shared
 LFLAGS	= -lm
-all: example example_mnist akira.so
+all: example example_mnist example_road akira.so
 
 example: example.o $(OBJS)
 	$(CC) -g example.o $(OBJS) -o $(OUT) $(LFLAGS)
@@ -19,6 +19,12 @@ example_mnist: example_mnist.o $(OBJS)
 
 example_mnist.o: examples/example_mnist.c
 	$(CC) $(FLAGS) examples/example_mnist.c
+
+example_road: example_road.o $(OBJS)
+	$(CC) -g example_road.o $(OBJS) -o example_road $(LFLAGS)
+
+example_road.o: examples/example_road.c
+	$(CC) $(FLAGS) examples/example_road.c
 
 akira.o: src/akira.c
 	$(CC) $(FLAGS) src/akira.c 
@@ -35,7 +41,7 @@ cmatrix.so: cmatrix/cmatrix.c
 	cc $(SHARED) -o cmatrix.so cmatrix/cmatrix.c
 
 clean:
-	rm -f example.o example_mnist.o example_mnist $(OBJ) $(OUT) *.o *.so cmatrix/*.o cmatrix/*.so
+	rm -f example.o example_mnist.o example_mnist example_road $(OBJ) $(OUT) *.o *.so cmatrix/*.o cmatrix/*.so
 
 run: $(OUT)
 	./$(OUT)
