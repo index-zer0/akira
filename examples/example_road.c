@@ -32,8 +32,8 @@ int main(int argc, char **argv) {
     matrix training_input = matrix_constructor(size_of_input, 1);
     matrix training_output = matrix_constructor(size_of_output, 1);
 
-    int sizes[] = {size_of_input, 600, size_of_output};
-    network = nn_constructor(1, sizes);
+    int sizes[] = {size_of_input, 72, 108, 144, 192, 192, 100, 50, 10, size_of_output};
+    network = nn_constructor(8, sizes);
 
     if (argc == 2) {
         number_of_iteration = atoi(argv[1]);
