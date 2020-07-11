@@ -282,11 +282,17 @@ nn load_0_1_0(const char *filename) {
             }
         }
     }
-    printf("#############\nNote:\n");
+    i = 0;
     while(fscanf(fp, "%c", &c) != EOF) {
+        if (i == 0) {
+            printf("#############\nNote:\n");
+            i++;
+        }
         printf("%c", c);
     }
-    printf("\n#############\n");
+    if (i != 0) {
+        printf("\n#############\n");
+    }
     fclose(fp);
     return network;
 }
