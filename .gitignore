@@ -57,4 +57,12 @@ cmatrix
 MNIST_for_C
 example
 example_mnist
+example_image
 *.akr
+
+*.jpg
+*.jpeg
+*.png
+
+data/Cat
+data/Dog

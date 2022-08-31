@@ -17,6 +17,36 @@ static inline double sigmoid_derivative(double number) {
     return number * (1 - number);
 }
 
+
+inline double tanh(double number) {
+    return 2.0 * sigmoid(2.0 * number) - 1.0;
+}
+
+static inline double tanh_derivative(double number) {
+    double t = tanh(number);
+    return 1 - t*t;
+}
+
+static inline double relu(double number) {
+    return number > 0.0 ? number:1.0/number;
+}
+
+static inline double relu_derivative(double number) {
+    return number > 0.0 ? 1.0:0.0;
+}
+
+static inline double activation(double number) {
+    return relu(number);
+    // return sigmoid(number);
+    // return tanh(number);
+}
+
+static inline double activation_derivative(double number) {
+    return relu_derivative(number);
+    // return sigmoid_derivative(number);
+    // return tanh_derivative(number);
+}
+
 nn nn_constructor(const int hidden_num, const int *sizes) {
     int i;
     nn network = malloc(sizeof(_nn));
@@ -31,7 +61,7 @@ nn nn_constructor(const int hidden_num, const int *sizes) {
         matrix_randomize(network->weights[i], -1, 1);
         matrix_randomize(network->bias[i], -1, 1);
     }
-    network->lr = 0.1;
+    network->lr = 0.2;
 
     return network;
 }
@@ -57,11 +87,12 @@ matrix run(nn network, matrix input) {
             hidden_layer[0] = matrix_mult(network->weights[0], input);
         }
         matrix_add(hidden_layer[i], network->bias[i]);
-        matrix_apply(hidden_layer[i], sigmoid);
+        matrix_apply(hidden_layer[i], activation);
     }
 
     matrix output_layer = matrix_mult(network->weights[network->hidden_num], hidden_layer[network->hidden_num-1]);
     matrix_add(output_layer, network->bias[network->hidden_num]);
+    
     matrix_apply(output_layer, sigmoid);
     for (i = 0; i < network->hidden_num; i++) {
         matrix_delete(hidden_layer[i]);
@@ -69,7 +100,16 @@ matrix run(nn network, matrix input) {
     return output_layer;
 }
 
+double mse(double *a, int size) {
+	double error = 0;
+	for (int i = 0; i < size; i++) {
+		error += a[i]*a[i];
+	}
+	return error / size;
+}
+
 void train(nn network, matrix training_input, matrix training_output) {
+    FILE *out = fopen("data.txt","a");
     int i = 0;
     matrix weights_T, weights_ho_delta, hidden_layer_T, last_layer_error, last_layer_error_temp, weights_delta, layer_T, output_layer, output_layer_error;
     matrix hidden_layer[network->hidden_num];
@@ -80,18 +120,21 @@ void train(nn network, matrix training_input, matrix training_output) {
             hidden_layer[0] = matrix_mult(network->weights[0], training_input);
         }
         matrix_add(hidden_layer[i], network->bias[i]);
-        matrix_apply(hidden_layer[i], sigmoid);
+        matrix_apply(hidden_layer[i], activation);
     }
     output_layer = matrix_mult(network->weights[network->hidden_num], hidden_layer[network->hidden_num-1]);
     matrix_add(output_layer, network->bias[network->hidden_num]);
+    /* *** */
     matrix_apply(output_layer, sigmoid);
 
     output_layer_error = matrix_constructor(training_output->rows, training_output->columns);
     memcpy(output_layer_error->p, training_output->p, sizeof(double) * output_layer_error->rows * output_layer_error->columns);
     // output output_layer_error
     matrix_sub(output_layer_error, output_layer);
-
+    // printf("error: %lf\n", mse(output_layer_error->p, output_layer_error->rows));
+    fprintf(out, "%lf\n", mse(output_layer_error->p, output_layer_error->rows));
     // gradient
+    /* *** */
     matrix_apply(output_layer, sigmoid_derivative);
     matrix_hadamard(output_layer, output_layer_error);
     matrix_scalar_mult(output_layer, network->lr);
@@ -108,7 +151,7 @@ void train(nn network, matrix training_input, matrix training_output) {
     matrix_delete(weights_T);
     for (i = network->hidden_num-1; i >= 0; i--) {
         // gradient
-        matrix_apply(hidden_layer[i], sigmoid_derivative);
+        matrix_apply(hidden_layer[i], activation_derivative);
         matrix_hadamard(hidden_layer[i], last_layer_error);
         matrix_scalar_mult(hidden_layer[i], network->lr);
 
@@ -132,8 +175,9 @@ void train(nn network, matrix training_input, matrix training_output) {
         last_layer_error = matrix_mult(weights_T, last_layer_error_temp);
         matrix_delete(last_layer_error_temp);
         matrix_delete(weights_T);
-
     }
+    #pragma omp parallel
+    #pragma omp for
     for (i = 0; i < network->hidden_num; i++) {
         matrix_delete(hidden_layer[i]);
     }
@@ -141,6 +185,7 @@ void train(nn network, matrix training_input, matrix training_output) {
     matrix_delete(weights_ho_delta);
     matrix_delete(output_layer);
     matrix_delete(output_layer_error);
+    fclose(out);
 }
 
 int save(nn network, const char *f_name, const char *notes, const char *file_version) {

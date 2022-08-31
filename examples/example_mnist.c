@@ -21,12 +21,14 @@ int main(int argc, char **argv) {
     int i, j;
     const int size_of_input = 784;
     const int size_of_output = 10;
-    const int train_number = 1000;
+    int train_number = 1000;
     int number_of_iteration = 10;
-    if (argc == 2) {
+    if (argc >= 2) {
         number_of_iteration = atoi(argv[1]);
     }
-
+    if (argc >= 3) {
+        train_number = atoi(argv[2]);
+    }
     load_mnist();
     double *dtraining_output = malloc(sizeof(double) * size_of_output * train_number);
     
@@ -66,8 +68,9 @@ int main(int argc, char **argv) {
         }
         
     }
-    int sizes[] = {size_of_input, 128, 128, size_of_output};
-    nn network = nn_constructor(2, sizes);
+    int sizes[] = {size_of_input, 1024, 1024, size_of_output};
+    // nn network = nn_constructor(2, sizes);
+    nn network = load("model.akr");
     matrix training_input = matrix_constructor(size_of_input, 1);
     matrix training_output = matrix_constructor(size_of_output, 1);
     for (i = 0; i < number_of_iteration; i++) {
@@ -76,19 +79,18 @@ int main(int argc, char **argv) {
             memcpy(training_input->p, &train_image[j][0], sizeof(double) * size_of_input);
             memcpy(training_output->p, dtraining_output + size_of_output * j, sizeof(double) * size_of_output);
             train(network, training_input, training_output);
+ 
+            printf("%d/%d - %lf%%\r", i, number_of_iteration, (double)((double)j/(double)train_number * 100.0));
+            fflush(stdout);
         }
-        //if ((i % 100) == 0) {
-        printf("%lf%%\r", (double)((double)i/(double)number_of_iteration * 100.0));
-        fflush(stdout);
-        //}
     }
     printf("Done training\n");
     matrix output;
-    for (j = 0; j < 10; j++) {
+    int correct = 0;
+    for (j = 0; j < 100; j++) {
         memcpy(training_input->p, &test_image[j][0], sizeof(double) * size_of_input);
         memcpy(training_output->p, dtraining_output + size_of_output * j, sizeof(double) * size_of_output);
         output = run(network, training_input);
-        printf("\ninput %d:\n", test_label[j]);
         double max = -100.0;
         int max_index = -1;
         for (i = 0; i < output->rows; i++) {
@@ -97,32 +99,19 @@ int main(int argc, char **argv) {
                 max_index = i;
             }
         }
-        printf("prediction: %d\n", max_index);
+        if (max_index == test_label[j]) {
+            correct++;
+        } else {
+            printf("\ninput %d:\n", test_label[j]);
+            printf("prediction: %d\n", max_index);
+        }
         matrix_delete(output);
     }
     if (save(network, "model", "just some notes", FILE_VERSION) != 0) {
         printf("File was not saved\n");
     }
+    printf("Accuracy: %d/%d (%f%%)\n", correct, 100, (double)correct);
     
-    nn_delete(network);
-    network = load("model.akr");
-
-    for (j = 0; j < 10; j++) {
-        memcpy(training_input->p, &test_image[j][0], sizeof(double) * size_of_input);
-        memcpy(training_output->p, dtraining_output + size_of_output * j, sizeof(double) * size_of_output);
-        output = run(network, training_input);
-        printf("\ninput %d:\n", test_label[j]);
-        double max = -100.0;
-        int max_index = -1;
-        for (i = 0; i < output->rows; i++) {
-            if (output->p[i] > max) {
-                max = output->p[i];
-                max_index = i;
-            }
-        }
-        printf("prediction: %d\n", max_index);
-        matrix_delete(output);
-    }
     free(dtraining_output);
     matrix_delete(training_input);
     matrix_delete(training_output);
