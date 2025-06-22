@@ -41,13 +41,12 @@ int main(int argc, char **argv) {
         printf("Using backend: %s\n", backend == AKIRA_BACKEND_CPU ? "CPU (cmatrix)" : "Metal (mmatrix)");
         fflush(stdout);
         srand(42); // fixed seed for reproducibility
-        int i, j;
         int sizes[] = {2, 2, 1};
         nn network = nn_constructor(1, sizes, backend);
         if (backend == AKIRA_BACKEND_CPU) {
             network->lr = 0.5;
         } else {
-            network->lr = 0.5;
+            network->lr = 0.1;
         }
         void *training_input;
         void *training_output;
@@ -68,8 +67,8 @@ int main(int argc, char **argv) {
             training_output = mmatrix_constructor(1, 1);
         }
         // TRAINING START
-        for (i = 0; i < TRAIN_SIZE; i++) {
-            for (j = 0; j < 4; j++) {
+        for (int i = 0; i < TRAIN_SIZE; i++) {
+            for (int j = 0; j < 4; j++) {
                 if (backend == AKIRA_BACKEND_CPU) {
                     memcpy(((matrix)training_input)->p, dtraining_input + 2 * j, sizeof(double) * 2);
                     memcpy(((matrix)training_output)->p, dtraining_output + 1 * j, sizeof(double) * 1);
@@ -80,14 +79,17 @@ int main(int argc, char **argv) {
                     train(network, training_input, training_output);
                 }
             }
-          if (i % 100 == 0) {
-            printf("%d/%d\n", i, TRAIN_SIZE);
-          }
+            if (i % 100 == 0) {
+                printf("\r%d/%d", i, TRAIN_SIZE);
+                fflush(stdout);
+            }
         }
+        printf("\r\n");
+        fflush(stdout);
         // TRAINING END
 
         void *output;
-        for (j = 0; j < 4; j++) {
+        for (int j = 0; j < 4; j++) {
             if (backend == AKIRA_BACKEND_CPU) {
                 memcpy(((matrix)training_input)->p, dtraining_input + 2 * j, sizeof(double) * 2);
                 output = run(network, training_input);
