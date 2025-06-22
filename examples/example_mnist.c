@@ -67,7 +67,7 @@ int main(int argc, char **argv) {
         
     }
     int sizes[] = {size_of_input, 128, 128, size_of_output};
-    nn network = nn_constructor(2, sizes);
+    nn network = nn_constructor(2, sizes, AKIRA_BACKEND_CPU);
     matrix training_input = matrix_constructor(size_of_input, 1);
     matrix training_output = matrix_constructor(size_of_output, 1);
     for (i = 0; i < number_of_iteration; i++) {
@@ -105,7 +105,7 @@ int main(int argc, char **argv) {
     }
     
     nn_delete(network);
-    network = load("model.akr");
+    network = load("model.akr", AKIRA_BACKEND_CPU);
 
     for (j = 0; j < 10; j++) {
         memcpy(training_input->p, &test_image[j][0], sizeof(double) * size_of_input);
