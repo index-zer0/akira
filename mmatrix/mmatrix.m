@@ -674,6 +674,17 @@ void mmatrix_randomize(mmatrix m, float min, float max) {
     free(tmp);
 }
 
+void mmatrix_zero(mmatrix m) {
+    if (!m || !m->metalBuffer) {
+        printf("[ERROR] Invalid matrix for zeroing\n");
+        return;
+    }
+    /* Shared storage, so the CPU can clear it directly once pending work that
+     * might read the buffer has finished. */
+    mmatrix_flush();
+    memset([m->metalBuffer contents], 0, sizeof(float) * m->rows * m->columns);
+}
+
 int mmatrix_get_rows(mmatrix m) {
     return m ? m->rows : 0;
 }

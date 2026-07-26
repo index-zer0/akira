@@ -87,16 +87,21 @@ nn nn_constructor(const int hidden_num, const int *sizes, akira_backend backend)
     network->weights = malloc(sizeof(void *) * (network->hidden_num+1));
     network->bias = malloc(sizeof(void *) * (network->hidden_num+1));
     for (i = 0; i < network->hidden_num + 1; i++) {
+        /* Glorot: scaling the range by the layer's fan-in and fan-out keeps
+         * the spread of the weighted sum roughly constant as layers get
+         * wider. A fixed range saturates sigmoid on wide layers, where the
+         * derivative x*(1-x) collapses and backprop stops making progress.
+         * Biases start at zero. */
+        const double limit = sqrt(6.0 / (double)(sizes[i] + sizes[i+1]));
         if (backend == AKIRA_BACKEND_CPU) {
             network->weights[i] = matrix_constructor(sizes[i+1], sizes[i]);
             network->bias[i] = matrix_constructor(sizes[i+1], 1);
-            matrix_randomize((matrix)network->weights[i], -1, 1);
-            matrix_randomize((matrix)network->bias[i], -1, 1);
+            matrix_randomize((matrix)network->weights[i], -limit, limit);
         } else {
             network->weights[i] = mmatrix_constructor(sizes[i+1], sizes[i]);
             network->bias[i] = mmatrix_constructor(sizes[i+1], 1);
-            mmatrix_randomize((mmatrix)network->weights[i], -1, 1);
-            mmatrix_randomize((mmatrix)network->bias[i], -1, 1);
+            mmatrix_randomize((mmatrix)network->weights[i], (float)-limit, (float)limit);
+            mmatrix_zero((mmatrix)network->bias[i]);
         }
     }
     network->lr = 0.1;

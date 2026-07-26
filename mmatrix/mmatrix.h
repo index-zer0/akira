@@ -32,6 +32,7 @@ mmatrix mmatrix_transpose(mmatrix m);
 
 // Utility functions
 void mmatrix_randomize(mmatrix m, float min, float max);
+void mmatrix_zero(mmatrix m);
 void mmatrix_print(mmatrix m);
 
 /* --- batching --------------------------------------------------------------

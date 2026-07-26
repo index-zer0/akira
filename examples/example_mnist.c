@@ -66,11 +66,7 @@ int main(int argc, char **argv) {
         if (!network) {
             printf("No saved model found for this backend, training a new one...\n");
             network = nn_constructor(2, sizes, backend);
-            if (backend == AKIRA_BACKEND_CPU) {
-                network->lr = 0.5;
-            } else {
-                network->lr = 0.1;
-            }
+            network->lr = 0.05;
         } else {
             printf("Loaded model from %s\n", model_filename);
         }

@@ -57,4 +57,7 @@ cmatrix
 MNIST_for_C
 example
 example_mnist
-*.akr
+*.akr.jam/
+.opencode/agent/jam-*.md
+jamsession.local.json
+.jam/

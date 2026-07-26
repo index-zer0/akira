@@ -1,0 +1,104 @@
+{
+  "$schema": "./schema/jamsession.schema.json",
+
+  "_readme": "Minimal starter config -- this is what `jam init` scaffolds into a new project, and the LOWEST layer of the config stack. Keys starting with '_' are comments; JSON has none of its own. Two roles and one coding agent are enough to run a session; add more as you need them. Your personal setup (extra roles, extra coding agents, models, tokens) belongs in the GLOBAL config at ~/.config/jamsession/, where every project picks it up -- see `jam config layers`.",
+
+  "_layers_note": "Merge order, lowest precedence first: this file, then ~/.config/jamsession/jamsession.json, then ~/.config/jamsession/jamsession.local.json, then ./jamsession.json, then ./jamsession.local.json. Later layers win key by key; arrays are replaced whole. Run `jam config layers` to see which of these exist, and `jam config raw` for the merged result.",
+
+  "session": {
+    "name": "jam",
+    "attach_on_start": true,
+    "dashboard": true,
+    "max_agents": 6,
+    "env": {},
+    "nudge": {
+      "_note": "Nudges are deliberately one short line. The real payload always sits on disk in the inbox, so a garbled or missed nudge never loses a message.",
+      "template": "[JAM] {count} new message(s) from {from} -- run: jam read --next",
+      "enter_delay_ms": 350
+    }
+  },
+
+  "defaults": {
+    "_note": "Inherited by every role. Anything here can be overridden per role.",
+    "coding_agent": "claude",
+    "model": "",
+    "color": "colour244",
+    "worktree": false,
+    "autostart": true,
+    "max_instances": 4,
+    "env": {},
+    "extra_args": [],
+    "settings": "",
+    "peers": ["*"]
+  },
+
+  "coding_agents": {
+    "_note": "How to launch each CLI. 'args' is always emitted. Each 'optional_args' group is emitted only if every placeholder in it resolves non-empty, so an unset model cleanly drops --model instead of passing \"\". Placeholders: {model} {brief} {brief_text} {instance} {role} {session} {cwd} {workdir} {settings} {color}.",
+
+    "claude": {
+      "_note": "Agents run unattended, so permission prompts are fatal: a fleet that stops for approval every few minutes does not work. An --allowedTools allowlist was tried first and is NOT sufficient -- Claude Code refuses to statically match any command containing shell syntax (quotes, $(), pipes) or an env-var prefix, which is most real jam invocations. Hence --dangerously-skip-permissions. Scope the risk with worktree roles and a clean git tree, or set this back to [\"--permission-mode\",\"acceptEdits\"] and babysit the panes.",
+      "cmd": "claude",
+      "args": [
+        "--dangerously-skip-permissions"
+      ],
+      "optional_args": {
+        "model": [
+          "--model",
+          "{model}"
+        ],
+        "brief": [
+          "--append-system-prompt-file",
+          "{brief}"
+        ],
+        "settings": [
+          "--settings",
+          "{settings}"
+        ]
+      },
+      "brief_mode": "flag",
+      "env": {},
+      "no_subagents": {
+        "_note": "claude renamed the subagent tool Task -> Agent in v2.1.63; both names are still live strings in the 2.1.220 binary and claude --help documents --disallowedTools as 'Comma or space-separated list', so we pass both to be safe whichever one the installed version honours. There is no env var that fully disables the subagent tool; the closest real one is CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS (v2.1.198+, only the built-in Explore/Plan agents).",
+        "args": [
+          "--disallowedTools",
+          "Agent,Task"
+        ],
+        "env": {
+          "CLAUDE_CODE_DISABLE_EXPLORE_PLAN_AGENTS": "1"
+        }
+      }
+    }
+  },
+
+  "_roles_note": "A role is a seat at the table, not a person: max_instances controls how many agents can hold it at once. Give a role 'worktree: true' when its agents edit code, so concurrent instances cannot collide in the same tree. Add the rest of your roles (explorer, tester, reviewer, debugger, support) in the global config.",
+
+  "roles": {
+    "orchestrator": {
+      "description": "Owns the goal. Decomposes work, dispatches it, and integrates the results.",
+      "coding_agent": "claude",
+      "color": "colour208",
+      "prompt_file": "prompts/orchestrator.md",
+      "worktree": false,
+      "autostart": true,
+      "max_instances": 1,
+      "can_spawn": true,
+      "peers": ["*"],
+      "env": {},
+      "extra_args": []
+    },
+
+    "implementor": {
+      "description": "Writes and edits production code. Small, reviewable diffs.",
+      "coding_agent": "claude",
+      "color": "colour39",
+      "prompt_file": "prompts/implementor.md",
+      "worktree": true,
+      "branch": "jam/{instance}",
+      "autostart": false,
+      "max_instances": 4,
+      "peers": ["orchestrator"],
+      "env": {},
+      "extra_args": []
+    }
+  }
+}
