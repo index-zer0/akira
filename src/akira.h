@@ -1,3 +1,5 @@
+#pragma once
+
 #define AKIRA_VERSION "0.1.0"
 #define FILE_VERSION "0.1.0"
 
@@ -16,6 +18,7 @@ typedef struct nn {
     double lr;
     akira_backend backend;
     char notes[256];
+    void *ws;       // scratch buffers reused across train()/run() calls
 } _nn, *nn;
 
 nn nn_constructor(const int, const int *, akira_backend backend);

@@ -11,12 +11,71 @@ int g_debug = 0;
 int save_0_1_0(nn, const char *, const char *);
 nn load_0_1_0(const char *, int);
 
-static inline double sigmoid(double number) {
-    return (1 / (1 + exp(-number)));
+/* Scratch buffers for the activations and error signals of one sample. They
+ * are sized once from the weight shapes and then reused, so a training step
+ * performs no allocation at all. */
+typedef struct {
+    void **hidden;      // hidden_num activations, matrix* or mmatrix*
+    void **error;       // hidden_num error signals, same shapes as hidden
+    void *output;       // output activation
+    void *output_error; // output error signal
+} workspace;
+
+static void ws_delete(nn network) {
+    workspace *ws = (workspace *)network->ws;
+    int i;
+    if (!ws) {
+        return;
+    }
+    for (i = 0; i < network->hidden_num; i++) {
+        if (network->backend == AKIRA_BACKEND_CPU) {
+            matrix_delete((matrix)ws->hidden[i]);
+            matrix_delete((matrix)ws->error[i]);
+        } else {
+            mmatrix_delete((mmatrix)ws->hidden[i]);
+            mmatrix_delete((mmatrix)ws->error[i]);
+        }
+    }
+    if (network->backend == AKIRA_BACKEND_CPU) {
+        matrix_delete((matrix)ws->output);
+        matrix_delete((matrix)ws->output_error);
+    } else {
+        mmatrix_delete((mmatrix)ws->output);
+        mmatrix_delete((mmatrix)ws->output_error);
+    }
+    free(ws->hidden);
+    free(ws->error);
+    free(ws);
+    network->ws = NULL;
 }
 
-static inline double sigmoid_derivative(double number) {
-    return number * (1 - number);
+static void ws_init(nn network) {
+    workspace *ws = malloc(sizeof(workspace));
+    const int n = network->hidden_num;
+    int i, rows;
+    ws->hidden = malloc(sizeof(void *) * n);
+    ws->error = malloc(sizeof(void *) * n);
+    for (i = 0; i < n; i++) {
+        if (network->backend == AKIRA_BACKEND_CPU) {
+            rows = ((matrix)network->weights[i])->rows;
+            ws->hidden[i] = matrix_constructor(rows, 1);
+            ws->error[i] = matrix_constructor(rows, 1);
+        } else {
+            rows = mmatrix_get_rows((mmatrix)network->weights[i]);
+            ws->hidden[i] = mmatrix_constructor(rows, 1);
+            ws->error[i] = mmatrix_constructor(rows, 1);
+        }
+    }
+    if (network->backend == AKIRA_BACKEND_CPU) {
+        rows = ((matrix)network->weights[n])->rows;
+        ws->output = matrix_constructor(rows, 1);
+        ws->output_error = matrix_constructor(rows, 1);
+    } else {
+        rows = mmatrix_get_rows((mmatrix)network->weights[n]);
+        ws->output = mmatrix_constructor(rows, 1);
+        ws->output_error = mmatrix_constructor(rows, 1);
+    }
+    network->ws = ws;
 }
 
 nn nn_constructor(const int hidden_num, const int *sizes, akira_backend backend) {
@@ -24,6 +83,7 @@ nn nn_constructor(const int hidden_num, const int *sizes, akira_backend backend)
     nn network = malloc(sizeof(_nn));
     network->hidden_num = hidden_num;
     network->backend = backend;
+    network->ws = NULL;
     network->weights = malloc(sizeof(void *) * (network->hidden_num+1));
     network->bias = malloc(sizeof(void *) * (network->hidden_num+1));
     for (i = 0; i < network->hidden_num + 1; i++) {
@@ -45,6 +105,7 @@ nn nn_constructor(const int hidden_num, const int *sizes, akira_backend backend)
 
 void nn_delete(nn network) {
     int i;
+    ws_delete(network);
     for (i = 0; i < network->hidden_num + 1; i++) {
         if (network->backend == AKIRA_BACKEND_CPU) {
             matrix_delete((matrix)network->weights[i]);
@@ -59,170 +120,142 @@ void nn_delete(nn network) {
     free(network);
 }
 
-void *run(nn network, void *input) {
-    int i = 0;
-    void **hidden_layer = malloc(sizeof(void *) * network->hidden_num);
-    void *output_layer = NULL;
-    if (network->backend == AKIRA_BACKEND_CPU) {
-        for (i = 0; i < network->hidden_num; i++) {
-            if (i != 0) {
-                hidden_layer[i] = matrix_mult((matrix)network->weights[i], (matrix)hidden_layer[i-1]);
-            } else {
-                hidden_layer[0] = matrix_mult((matrix)network->weights[0], (matrix)input);
-            }
-            matrix_add((matrix)hidden_layer[i], (matrix)network->bias[i]);
-            matrix_apply((matrix)hidden_layer[i], sigmoid);
-        }
-        output_layer = matrix_mult((matrix)network->weights[network->hidden_num], (matrix)hidden_layer[network->hidden_num-1]);
-        matrix_add((matrix)output_layer, (matrix)network->bias[network->hidden_num]);
-        matrix_apply((matrix)output_layer, sigmoid);
-        for (i = 0; i < network->hidden_num; i++) {
-            matrix_delete((matrix)hidden_layer[i]);
-        }
-    } else {
-        for (i = 0; i < network->hidden_num; i++) {
-            if (i != 0) {
-                hidden_layer[i] = mmatrix_mult((mmatrix)network->weights[i], (mmatrix)hidden_layer[i-1]);
-            } else {
-                hidden_layer[0] = mmatrix_mult((mmatrix)network->weights[0], (mmatrix)input);
-            }
-            mmatrix_add((mmatrix)hidden_layer[i], (mmatrix)network->bias[i]);
-            mmatrix_apply((mmatrix)hidden_layer[i], 0); // 0: sigmoid
-        }
-        output_layer = mmatrix_mult((mmatrix)network->weights[network->hidden_num], (mmatrix)hidden_layer[network->hidden_num-1]);
-        mmatrix_add((mmatrix)output_layer, (mmatrix)network->bias[network->hidden_num]);
-        mmatrix_apply((mmatrix)output_layer, 0); // 0: sigmoid
-        for (i = 0; i < network->hidden_num; i++) {
-            mmatrix_delete((mmatrix)hidden_layer[i]);
-        }
+/* Forward pass into the workspace activations. Each layer is a single BLAS
+ * call: seeding the destination with the bias and accumulating (beta = 1)
+ * folds the bias add into the matrix product. */
+static void forward_cpu(nn network, matrix input) {
+    workspace *ws = (workspace *)network->ws;
+    const int n = network->hidden_num;
+    int i;
+    for (i = 0; i < n; i++) {
+        matrix h = (matrix)ws->hidden[i];
+        matrix_copy(h, (matrix)network->bias[i]);
+        matrix_gemm(h, (matrix)network->weights[i], 0,
+                    i == 0 ? input : (matrix)ws->hidden[i-1], 0, 1.0, 1.0);
+        matrix_sigmoid(h);
     }
-    free(hidden_layer);
+    matrix out = (matrix)ws->output;
+    matrix_copy(out, (matrix)network->bias[n]);
+    matrix_gemm(out, (matrix)network->weights[n], 0, (matrix)ws->hidden[n-1], 0, 1.0, 1.0);
+    matrix_sigmoid(out);
+}
+
+/* Same forward pass on the GPU. Each layer is one fused kernel that does the
+ * product, the bias add and the activation in a single dispatch. */
+static void forward_metal(nn network, mmatrix input) {
+    workspace *ws = (workspace *)network->ws;
+    const int n = network->hidden_num;
+    int i;
+    for (i = 0; i < n; i++) {
+        mmatrix_layer_forward((mmatrix)ws->hidden[i], (mmatrix)network->weights[i],
+                              i == 0 ? input : (mmatrix)ws->hidden[i-1],
+                              (mmatrix)network->bias[i]);
+    }
+    mmatrix_layer_forward((mmatrix)ws->output, (mmatrix)network->weights[n],
+                          (mmatrix)ws->hidden[n-1], (mmatrix)network->bias[n]);
+}
+
+void *run(nn network, void *input) {
+    void *output_layer = NULL;
+    if (!network->ws) {
+        ws_init(network);
+    }
+    workspace *ws = (workspace *)network->ws;
+    /* The caller owns the result, so hand back a copy of the scratch output
+     * rather than the workspace buffer itself. */
+    if (network->backend == AKIRA_BACKEND_CPU) {
+        forward_cpu(network, (matrix)input);
+        output_layer = matrix_constructor(((matrix)ws->output)->rows, 1);
+        matrix_copy((matrix)output_layer, (matrix)ws->output);
+    } else {
+        forward_metal(network, (mmatrix)input);
+        output_layer = mmatrix_constructor(mmatrix_get_rows((mmatrix)ws->output), 1);
+        mmatrix_copy((mmatrix)output_layer, (mmatrix)ws->output);
+    }
     return output_layer;
 }
 
 void train(nn network, void *training_input, void *training_output) {
+    if (!network->ws) {
+        ws_init(network);
+    }
     if (network->backend == AKIRA_BACKEND_CPU) {
-        int i = 0;
-        matrix weights_T, weights_ho_delta, hidden_layer_T, last_layer_error, last_layer_error_temp, weights_delta, layer_T, output_layer, output_layer_error;
-        matrix hidden_layer[network->hidden_num];
-        for (i = 0; i < network->hidden_num; i++) {
-            if (i != 0) {
-                hidden_layer[i] = matrix_mult((matrix)network->weights[i], hidden_layer[i-1]);
-            } else {
-                hidden_layer[0] = matrix_mult((matrix)network->weights[0], (matrix)training_input);
-            }
-            matrix_add(hidden_layer[i], (matrix)network->bias[i]);
-            matrix_apply(hidden_layer[i], sigmoid);
-        }
-        output_layer = matrix_mult((matrix)network->weights[network->hidden_num], hidden_layer[network->hidden_num-1]);
-        matrix_add(output_layer, (matrix)network->bias[network->hidden_num]);
-        matrix_apply(output_layer, sigmoid);
+        workspace *ws = (workspace *)network->ws;
+        const int n = network->hidden_num;
+        int i;
 
-        output_layer_error = matrix_constructor(((matrix)training_output)->rows, ((matrix)training_output)->columns);
-        memcpy(output_layer_error->p, ((matrix)training_output)->p, sizeof(double) * output_layer_error->rows * output_layer_error->columns);
+        forward_cpu(network, (matrix)training_input);
+
+        matrix output_layer = (matrix)ws->output;
+        matrix output_layer_error = (matrix)ws->output_error;
+        matrix_copy(output_layer_error, (matrix)training_output);
         matrix_sub(output_layer_error, output_layer);
 
-        matrix_apply(output_layer, sigmoid_derivative);
+        /* output_layer becomes the scaled output gradient. */
+        matrix_sigmoid_derivative(output_layer);
         matrix_hadamard(output_layer, output_layer_error);
         matrix_scalar_mult(output_layer, network->lr);
-        hidden_layer_T = transpose(hidden_layer[network->hidden_num-1]);
-        weights_ho_delta = matrix_mult(output_layer, hidden_layer_T);
-        matrix_delete(hidden_layer_T);
-        matrix_add((matrix)network->weights[network->hidden_num], weights_ho_delta);
-        matrix_add((matrix)network->bias[network->hidden_num], output_layer);
 
-        weights_T = transpose((matrix)network->weights[network->hidden_num]);
-        last_layer_error = matrix_mult(weights_T, output_layer_error);
-        matrix_delete(weights_T);
-        for (i = network->hidden_num-1; i >= 0; i--) {
-            matrix_apply(hidden_layer[i], sigmoid_derivative);
-            matrix_hadamard(hidden_layer[i], last_layer_error);
-            matrix_scalar_mult(hidden_layer[i], network->lr);
-            if (i == 0) {
-                layer_T = transpose((matrix)training_input);
-            } else {
-                layer_T = transpose(hidden_layer[i-1]);
+        /* W += grad * h**T is a rank-1 update; passing the transpose flag
+         * means the transpose is never materialized. */
+        matrix_gemm((matrix)network->weights[n], output_layer, 0, (matrix)ws->hidden[n-1], 1, 1.0, 1.0);
+        matrix_add((matrix)network->bias[n], output_layer);
+
+        /* Backpropagate through the just-updated weights, as before. */
+        matrix last_layer_error = (matrix)ws->error[n-1];
+        matrix_gemm(last_layer_error, (matrix)network->weights[n], 1, output_layer_error, 0, 1.0, 0.0);
+
+        for (i = n - 1; i >= 0; i--) {
+            matrix h = (matrix)ws->hidden[i];
+            matrix_sigmoid_derivative(h);
+            matrix_hadamard(h, last_layer_error);
+            matrix_scalar_mult(h, network->lr);
+            matrix_gemm((matrix)network->weights[i], h, 0,
+                        i == 0 ? (matrix)training_input : (matrix)ws->hidden[i-1], 1, 1.0, 1.0);
+            matrix_add((matrix)network->bias[i], h);
+            /* The error signal below the first layer is never read, so the
+             * widest gemv of the step (input-sized) is simply skipped. */
+            if (i > 0) {
+                matrix next_error = (matrix)ws->error[i-1];
+                matrix_gemm(next_error, (matrix)network->weights[i], 1, last_layer_error, 0, 1.0, 0.0);
+                last_layer_error = next_error;
             }
-            weights_delta = matrix_mult(hidden_layer[i], layer_T);
-            matrix_delete(layer_T);
-            matrix_add((matrix)network->weights[i], weights_delta);
-            matrix_add((matrix)network->bias[i], hidden_layer[i]);
-            matrix_delete(weights_delta);
-            weights_T = transpose((matrix)network->weights[i]);
-            last_layer_error_temp = matrix_constructor(last_layer_error->rows, last_layer_error->columns);
-            memcpy(last_layer_error_temp->p, last_layer_error->p, sizeof(double) * last_layer_error_temp->rows * last_layer_error_temp->columns);
-            matrix_delete(last_layer_error);
-            last_layer_error = matrix_mult(weights_T, last_layer_error_temp);
-            matrix_delete(last_layer_error_temp);
-            matrix_delete(weights_T);
         }
-        for (i = 0; i < network->hidden_num; i++) {
-            matrix_delete(hidden_layer[i]);
-        }
-        matrix_delete(last_layer_error);
-        matrix_delete(weights_ho_delta);
-        matrix_delete(output_layer);
-        matrix_delete(output_layer_error);
     } else {
-        int i = 0;
-        mmatrix weights_T, weights_ho_delta, hidden_layer_T, last_layer_error, last_layer_error_temp, weights_delta, layer_T, output_layer, output_layer_error;
-        mmatrix hidden_layer[network->hidden_num];
-        for (i = 0; i < network->hidden_num; i++) {
-            if (i != 0) {
-                hidden_layer[i] = mmatrix_mult((mmatrix)network->weights[i], hidden_layer[i-1]);
-            } else {
-                hidden_layer[0] = mmatrix_mult((mmatrix)network->weights[0], (mmatrix)training_input);
+        /* Mirror of the CPU path. Nothing is allocated, no transpose is
+         * materialized, and the whole step is encoded into one command buffer
+         * that is submitted once, when the next sample overwrites the input. */
+        workspace *ws = (workspace *)network->ws;
+        const int n = network->hidden_num;
+        int i;
+
+        forward_metal(network, (mmatrix)training_input);
+
+        mmatrix output_layer = (mmatrix)ws->output;
+        mmatrix output_layer_error = (mmatrix)ws->output_error;
+        mmatrix_sub_into(output_layer_error, (mmatrix)training_output, output_layer);
+
+        /* output_layer becomes the scaled output gradient. */
+        mmatrix_gradient(output_layer, output_layer_error, (float)network->lr);
+
+        mmatrix_gemm((mmatrix)network->weights[n], output_layer, 0, (mmatrix)ws->hidden[n-1], 1, 1.0f, 1.0f);
+        mmatrix_add((mmatrix)network->bias[n], output_layer);
+
+        mmatrix last_layer_error = (mmatrix)ws->error[n-1];
+        mmatrix_gemm(last_layer_error, (mmatrix)network->weights[n], 1, output_layer_error, 0, 1.0f, 0.0f);
+
+        for (i = n - 1; i >= 0; i--) {
+            mmatrix h = (mmatrix)ws->hidden[i];
+            mmatrix_gradient(h, last_layer_error, (float)network->lr);
+            mmatrix_gemm((mmatrix)network->weights[i], h, 0,
+                         i == 0 ? (mmatrix)training_input : (mmatrix)ws->hidden[i-1], 1, 1.0f, 1.0f);
+            mmatrix_add((mmatrix)network->bias[i], h);
+            if (i > 0) {
+                mmatrix next_error = (mmatrix)ws->error[i-1];
+                mmatrix_gemm(next_error, (mmatrix)network->weights[i], 1, last_layer_error, 0, 1.0f, 0.0f);
+                last_layer_error = next_error;
             }
-            mmatrix_add((mmatrix)hidden_layer[i], (mmatrix)network->bias[i]);
-            mmatrix_apply((mmatrix)hidden_layer[i], 0); // 0: sigmoid
         }
-        output_layer = mmatrix_mult((mmatrix)network->weights[network->hidden_num], hidden_layer[network->hidden_num-1]);
-        mmatrix_add((mmatrix)output_layer, (mmatrix)network->bias[network->hidden_num]);
-        mmatrix_apply((mmatrix)output_layer, 0); // 0: sigmoid
-
-        output_layer_error = mmatrix_constructor(mmatrix_get_rows((mmatrix)training_output), mmatrix_get_cols((mmatrix)training_output));
-        mmatrix_copy(output_layer_error, (mmatrix)training_output);
-        mmatrix_sub(output_layer_error, output_layer);
-
-        mmatrix_apply(output_layer, 1); // 1: sigmoid_derivative
-        mmatrix_hadamard(output_layer, output_layer_error);
-        mmatrix_scalar_mult(output_layer, network->lr);
-        hidden_layer_T = mmatrix_transpose(hidden_layer[network->hidden_num-1]);
-        weights_ho_delta = mmatrix_mult(output_layer, hidden_layer_T);
-        mmatrix_add((mmatrix)network->weights[network->hidden_num], weights_ho_delta);
-        mmatrix_add((mmatrix)network->bias[network->hidden_num], output_layer);
-
-        weights_T = mmatrix_transpose((mmatrix)network->weights[network->hidden_num]);
-        last_layer_error = mmatrix_mult(weights_T, output_layer_error);
-        for (i = network->hidden_num-1; i >= 0; i--) {
-            mmatrix_apply(hidden_layer[i], 1); // 1: sigmoid_derivative
-            mmatrix_hadamard(hidden_layer[i], last_layer_error);
-            mmatrix_scalar_mult(hidden_layer[i], network->lr);
-            if (i == 0) {
-                layer_T = mmatrix_transpose((mmatrix)training_input);
-            } else {
-                layer_T = mmatrix_transpose(hidden_layer[i-1]);
-            }
-            weights_delta = mmatrix_mult(hidden_layer[i], layer_T);
-            mmatrix_add((mmatrix)network->weights[i], weights_delta);
-            mmatrix_add((mmatrix)network->bias[i], hidden_layer[i]);
-            mmatrix_delete(weights_delta);
-            mmatrix_delete(layer_T);
-            weights_T = mmatrix_transpose((mmatrix)network->weights[i]);
-            last_layer_error_temp = mmatrix_mult(weights_T, last_layer_error);
-            mmatrix_delete(last_layer_error);
-            mmatrix_delete(weights_T);
-            last_layer_error = last_layer_error_temp;
-        }
-
-        for (i = 0; i < network->hidden_num; i++) {
-            mmatrix_delete(hidden_layer[i]);
-        }
-        mmatrix_delete(hidden_layer_T);
-        mmatrix_delete(weights_ho_delta);
-        mmatrix_delete(last_layer_error);
-        mmatrix_delete(output_layer);
-        mmatrix_delete(output_layer_error);
     }
 }
 
@@ -361,22 +394,22 @@ nn load_0_1_0(const char *filename, int backend) {
     fscanf(fp, "%s %s\n", file_version, akira_version);
     fscanf(fp, "%d %lf\n", &(network->hidden_num), &(network->lr));
     network->backend = backend;
+    network->ws = NULL;
     network->weights = malloc(sizeof(void *) * (network->hidden_num + 1));
     network->bias = malloc(sizeof(void *) * (network->hidden_num + 1));
     for (i = 0; i < network->hidden_num + 1; i++) {
         if (network->backend == AKIRA_BACKEND_CPU) {
-            matrix w = malloc(sizeof(_matrix));
-            fscanf(fp, "%d %d\n", &(w->rows), &(w->columns));
-            w->p = malloc(sizeof(double) * w->rows * w->columns);
-            for (j = 0; j < w->rows * w->columns; j++) {
+            int rows, cols;
+            fscanf(fp, "%d %d\n", &rows, &cols);
+            matrix w = matrix_constructor(rows, cols);
+            for (j = 0; j < rows * cols; j++) {
                 fscanf(fp, "%lf ", &(w->p[j]));
             }
             network->weights[i] = w;
             fscanf(fp, "\n");
-            matrix b = malloc(sizeof(_matrix));
-            fscanf(fp, "%d %d\n", &(b->rows), &(b->columns));
-            b->p = malloc(sizeof(double) * b->rows * b->columns);
-            for (j = 0; j < b->rows * b->columns; j++) {
+            fscanf(fp, "%d %d\n", &rows, &cols);
+            matrix b = matrix_constructor(rows, cols);
+            for (j = 0; j < rows * cols; j++) {
                 fscanf(fp, "%lf ", &(b->p[j]));
             }
             network->bias[i] = b;

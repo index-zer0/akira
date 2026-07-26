@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <sys/time.h>
 #include "../src/akira.h"
 //https://github.com/takafumihoriuchi/MNIST_for_C/
 #include "../MNIST_for_C/mnist.h"
@@ -16,13 +17,21 @@ double seven[10] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0};
 double eight[10] = {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0};
 double nine[10] =  {0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0};
 
+/* Wall clock, not clock(): a thread blocked on the GPU accrues no CPU time,
+ * so clock() badly under-reports the Metal backend. */
+static double wall_seconds(void) {
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    return (double)tv.tv_sec + (double)tv.tv_usec * 1e-6;
+}
+
 int main(int argc, char **argv) {
     g_debug = 1;
     srand(time(0));
     int i, j, backend_id;
     const int size_of_input = 784;
     const int size_of_output = 10;
-    const int train_number = 1000;
+    const int train_number = 10000;
     int number_of_iteration = 10;
     if (argc == 2) {
         number_of_iteration = atoi(argv[1]);
@@ -51,12 +60,19 @@ int main(int argc, char **argv) {
         printf("Using backend: %s\n", backend == AKIRA_BACKEND_CPU ? "CPU (cmatrix)" : "Metal (mmatrix)");
         fflush(stdout);
         srand(42);
-        clock_t start = clock();
-        nn network = nn_constructor(2, sizes, backend);
-        if (backend == AKIRA_BACKEND_CPU) {
-            network->lr = 0.5;
+        double start = wall_seconds();
+        char *model_filename = backend == AKIRA_BACKEND_CPU ? "model.akr" : "model_metal.akr";
+        nn network = load(model_filename, backend);
+        if (!network) {
+            printf("No saved model found for this backend, training a new one...\n");
+            network = nn_constructor(2, sizes, backend);
+            if (backend == AKIRA_BACKEND_CPU) {
+                network->lr = 0.5;
+            } else {
+                network->lr = 0.1;
+            }
         } else {
-            network->lr = 0.1;
+            printf("Loaded model from %s\n", model_filename);
         }
         void *training_input;
         void *training_output;
@@ -71,7 +87,7 @@ int main(int argc, char **argv) {
             ftraining_input = malloc(sizeof(float) * size_of_input);
             ftraining_output = malloc(sizeof(float) * size_of_output);
         }
-        // TRAINING
+        // TRAINING (always, even if loaded)
         for (i = 0; i < number_of_iteration; i++) {
             for (j = 0; j < train_number; j++) {
                 if (backend == AKIRA_BACKEND_CPU) {
@@ -90,9 +106,22 @@ int main(int argc, char **argv) {
             fflush(stdout);
         }
         printf("Done training\n");
+        if (save(network, model_filename, "just some notes", FILE_VERSION) != 0) {
+            printf("File was not saved\n");
+        }
         // TESTING
+        int test_indices[10];
+        int used[10000] = {0};
+        for (i = 0; i < 10; ) {
+            int idx = rand() % NUM_TEST;
+            if (!used[idx]) {
+                test_indices[i++] = idx;
+                used[idx] = 1;
+            }
+        }
         void *output;
-        for (j = 0; j < 10; j++) {
+        for (int test_i = 0; test_i < 10; test_i++) {
+            int j = test_indices[test_i];
             if (backend == AKIRA_BACKEND_CPU) {
                 memcpy(((matrix)training_input)->p, &test_image[j][0], sizeof(double) * size_of_input);
                 memcpy(((matrix)training_output)->p, dtraining_output + size_of_output * j, sizeof(double) * size_of_output);
@@ -127,9 +156,6 @@ int main(int argc, char **argv) {
                 mmatrix_delete((mmatrix)output);
             }
         }
-        if (save(network, backend == AKIRA_BACKEND_CPU ? "model" : "model_metal", "just some notes", FILE_VERSION) != 0) {
-            printf("File was not saved\n");
-        }
         nn_delete(network);
         if (backend == AKIRA_BACKEND_CPU) {
             matrix_delete((matrix)training_input);
@@ -140,8 +166,7 @@ int main(int argc, char **argv) {
             free(ftraining_input);
             free(ftraining_output);
         }
-        clock_t end = clock();
-        double elapsed = (double)(end - start) / CLOCKS_PER_SEC;
+        double elapsed = wall_seconds() - start;
         printf("Elapsed time for %s: %.3f seconds\n", backend == AKIRA_BACKEND_CPU ? "CPU" : "Metal", elapsed);
     }
     free(dtraining_output);
